@@ -1,0 +1,19 @@
+### TinySwallow-1.5B（10 万条）在留出集 riichi_test5k 上生成动作，与其它模型同一批 5000 条
+model_name_or_path: SakanaAI/TinySwallow-1.5B-Instruct
+adapter_name_or_path: /home/user/mahjong-llm/work/ckpt/tinyswallow-1.5b-riichi_100k
+trust_remote_code: true
+stage: sft
+do_predict: true
+finetuning_type: lora
+dataset_dir: /home/user/mahjong-llm/work/sft
+eval_dataset: riichi_test5k
+template: qwen
+default_system: あなたは、Sakana AI株式会社が開発したTinySwallowです。小型ながら、誠実で優秀なアシスタントです。
+cutoff_len: 4096
+output_dir: /home/user/mahjong-llm/work/pred/tinyswallow-1.5b-100k
+overwrite_output_dir: true
+per_device_eval_batch_size: 8
+predict_with_generate: true
+max_new_tokens: 32
+do_sample: false
+report_to: none

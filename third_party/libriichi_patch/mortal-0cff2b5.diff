@@ -1,0 +1,588 @@
+diff --git a/libriichi/src/agent/mortal.rs b/libriichi/src/agent/mortal.rs
+index e1b14ee..50365ea 100644
+--- a/libriichi/src/agent/mortal.rs
++++ b/libriichi/src/agent/mortal.rs
+@@ -1,7 +1,7 @@
+ use super::{BatchAgent, InvisibleState};
+ use crate::consts::ACTION_SPACE;
+ use crate::mjai::{Event, EventExt, Metadata};
+-use crate::state::PlayerState;
++use crate::state::{PlayerState, RawObsEvent};
+ use crate::{must_tile, tu8};
+ use std::mem;
+ use std::sync::Arc;
+@@ -14,6 +14,14 @@ use numpy::{PyArray1, PyArray2};
+ use parking_lot::Mutex;
+ use pyo3::intern;
+ use pyo3::prelude::*;
++use pyo3::types::PyList;
++
++/// Like `getattr` + `extract`, but returns `None` when the attribute is
++/// missing instead of failing. LLM engines (`engine_type == "mortal2"`)
++/// expose only a subset of the attributes regular Mortal engines define.
++fn optional_attr<'py, T: FromPyObject<'py>>(obj: &Bound<'py, PyAny>, name: &str) -> Option<T> {
++    obj.getattr(name).ok()?.extract().ok()
++}
+ 
+ pub struct MortalBatchAgent {
+     engine: PyObject,
+@@ -23,6 +31,9 @@ pub struct MortalBatchAgent {
+     enable_rule_based_agari_guard: bool,
+     name: String,
+     player_ids: Vec<u8>,
++    /// Call the engine with raw obs snapshots and accept a plain action
++    /// list (see [`Self::new_with_raw`]).
++    send_obs_raw: bool,
+ 
+     actions: Vec<usize>,
+     q_values: Vec<[f32; ACTION_SPACE]>,
+@@ -41,6 +52,7 @@ pub struct MortalBatchAgent {
+ struct SyncFields {
+     states: Vec<Array2<f32>>,
+     invisible_states: Vec<Array2<f32>>,
++    raw_states: Vec<RawObsEvent>,
+     masks: Vec<Array1<bool>>,
+     action_idxs: Vec<usize>,
+     kan_action_idxs: Vec<Option<usize>>,
+@@ -59,11 +71,11 @@ impl MortalBatchAgent {
+                 );
+ 
+                 let name = obj.getattr("name")?.extract()?;
+-                let is_oracle = obj.getattr("is_oracle")?.extract()?;
++                let is_oracle = optional_attr(&obj, "is_oracle").unwrap_or(false);
+                 let version = obj.getattr("version")?.extract()?;
+-                let enable_quick_eval = obj.getattr("enable_quick_eval")?.extract()?;
++                let enable_quick_eval = optional_attr(&obj, "enable_quick_eval").unwrap_or(false);
+                 let enable_rule_based_agari_guard =
+-                    obj.getattr("enable_rule_based_agari_guard")?.extract()?;
++                    optional_attr(&obj, "enable_rule_based_agari_guard").unwrap_or(false);
+                 Ok((
+                     name,
+                     is_oracle,
+@@ -82,6 +94,7 @@ impl MortalBatchAgent {
+         let sync_fields = Arc::new(Mutex::new(SyncFields {
+             states: vec![],
+             invisible_states: vec![],
++            raw_states: vec![],
+             masks: vec![],
+             action_idxs: vec![0; size],
+             kan_action_idxs: vec![None; size],
+@@ -95,6 +108,7 @@ impl MortalBatchAgent {
+             enable_rule_based_agari_guard,
+             name,
+             player_ids: player_ids.to_vec(),
++            send_obs_raw: false,
+ 
+             actions: vec![],
+             q_values: vec![],
+@@ -111,6 +125,17 @@ impl MortalBatchAgent {
+         })
+     }
+ 
++    /// Same as [`Self::new`], but the engine is called as
++    /// `react_batch(obs, masks, obs_raw)` with raw state snapshots and may
++    /// return a plain list of action ids instead of the
++    /// `(actions, q_values, masks, is_greedy)` tuple (LLM engines,
++    /// `engine_type == "mortal2"`).
++    pub fn new_with_raw(engine: PyObject, player_ids: &[u8]) -> Result<Self> {
++        let mut agent = Self::new(engine, player_ids)?;
++        agent.send_obs_raw = true;
++        Ok(agent)
++    }
++
+     fn evaluate(&mut self) -> Result<()> {
+         // Wait for all feature encodings to complete.
+         mem::take(&mut self.wg).wait();
+@@ -129,26 +154,68 @@ impl MortalBatchAgent {
+                 .drain(..)
+                 .map(|v| PyArray2::from_owned_array(py, v))
+                 .collect();
++            let masks_meta: Option<Vec<[bool; ACTION_SPACE]>> =
++                self.send_obs_raw.then(|| {
++                    sync_fields
++                        .masks
++                        .iter()
++                        .map(|row| {
++                            let mut arr = [false; ACTION_SPACE];
++                            for (dst, &src) in arr.iter_mut().zip(row.iter()) {
++                                *dst = src;
++                            }
++                            arr
++                        })
++                        .collect()
++                });
+             let masks: Vec<_> = sync_fields
+                 .masks
+                 .drain(..)
+                 .map(|v| PyArray1::from_owned_array(py, v))
+                 .collect();
+-            let invisible_states: Option<Vec<_>> = self.is_oracle.then(|| {
+-                sync_fields
+-                    .invisible_states
++            let third: PyObject = if self.send_obs_raw {
++                let raws = sync_fields
++                    .raw_states
+                     .drain(..)
+-                    .map(|v| PyArray2::from_owned_array(py, v))
+-                    .collect()
+-            });
++                    .map(|r| Py::new(py, r))
++                    .collect::<PyResult<Vec<_>>>()?;
++                PyList::new(py, raws)?.into_any().unbind()
++            } else {
++                let invisible_states: Option<Vec<_>> = self.is_oracle.then(|| {
++                    sync_fields
++                        .invisible_states
++                        .drain(..)
++                        .map(|v| PyArray2::from_owned_array(py, v))
++                        .collect()
++                });
++                match invisible_states {
++                    Some(v) => PyList::new(py, v)?.into_any().unbind(),
++                    None => py.None(),
++                }
++            };
+ 
+-            let args = (states, masks, invisible_states);
+-            self.engine
++            let args = (states, masks, third);
++            let result = self
++                .engine
+                 .bind_borrowed(py)
+                 .call_method1(intern!(py, "react_batch"), args)
+-                .context("failed to execute `react_batch` on Python engine")?
+-                .extract()
+-                .context("failed to extract to Rust type")
++                .context("failed to execute `react_batch` on Python engine")?;
++            if self.send_obs_raw {
++                let actions: Vec<usize> = result
++                    .extract()
++                    .context("failed to extract action list from engine")?;
++                let batch_size = actions.len();
++                Ok((
++                    actions,
++                    vec![[0.0; ACTION_SPACE]; batch_size],
++                    masks_meta.unwrap_or_default(),
++                    vec![true; batch_size],
++                ))
++            } else {
++                result
++                    .extract()
++                    .context("failed to extract to Rust type")
++            }
+         })?;
+ 
+         self.last_eval_elapsed = Instant::now()
+@@ -250,6 +317,7 @@ impl BatchAgent for MortalBatchAgent {
+         };
+ 
+         let version = self.version;
++        let send_obs_raw = self.send_obs_raw;
+         let state = state.clone();
+         let sync_fields = Arc::clone(&self.sync_fields);
+         let wg = self.wg.clone();
+@@ -262,9 +330,12 @@ impl BatchAgent for MortalBatchAgent {
+             let kan = need_kan_select.then(|| state.encode_obs(version, true));
+             let (feature, mask) = state.encode_obs(version, false);
+ 
++            let raw = send_obs_raw.then(|| state.snapshot_raw());
++
+             let SyncFields {
+                 states,
+                 invisible_states,
++                raw_states,
+                 masks,
+                 action_idxs,
+                 kan_action_idxs,
+@@ -276,6 +347,9 @@ impl BatchAgent for MortalBatchAgent {
+                 if let Some(invisible_state) = invisible_state.clone() {
+                     invisible_states.push(invisible_state);
+                 }
++                if let Some(raw) = &raw {
++                    raw_states.push(raw.clone());
++                }
+             }
+ 
+             action_idxs[index] = states.len();
+@@ -284,6 +358,9 @@ impl BatchAgent for MortalBatchAgent {
+             if let Some(invisible_state) = invisible_state {
+                 invisible_states.push(invisible_state);
+             }
++            if let Some(raw) = raw {
++                raw_states.push(raw);
++            }
+         });
+ 
+         Ok(())
+diff --git a/libriichi/src/agent/py_agent.rs b/libriichi/src/agent/py_agent.rs
+index f592491..12d3799 100644
+--- a/libriichi/src/agent/py_agent.rs
++++ b/libriichi/src/agent/py_agent.rs
+@@ -6,6 +6,7 @@ use pyo3::prelude::*;
+ 
+ enum EngineType {
+     Mortal,
++    Mortal2,
+     MjaiLog,
+ }
+ 
+@@ -15,6 +16,7 @@ impl FromStr for EngineType {
+     fn from_str(s: &str) -> Result<Self, Self::Err> {
+         match s {
+             "mortal" => Ok(Self::Mortal),
++            "mortal2" => Ok(Self::Mortal2),
+             "mjai-log" => Ok(Self::MjaiLog),
+             v => bail!("unknown engine type {v}"),
+         }
+@@ -31,6 +33,9 @@ pub fn new_py_agent(engine: PyObject, player_ids: &[u8]) -> Result<Box<dyn Batch
+     })?;
+     let agent = match engine_type {
+         EngineType::Mortal => Box::new(MortalBatchAgent::new(engine, player_ids)?) as _,
++        EngineType::Mortal2 => {
++            Box::new(MortalBatchAgent::new_with_raw(engine, player_ids)?) as _
++        }
+         EngineType::MjaiLog => Box::new(MjaiLogBatchAgent::new(engine, player_ids)?) as _,
+     };
+     Ok(agent)
+diff --git a/libriichi/src/dataset/gameplay.rs b/libriichi/src/dataset/gameplay.rs
+index 32558e3..cce37d5 100644
+--- a/libriichi/src/dataset/gameplay.rs
++++ b/libriichi/src/dataset/gameplay.rs
+@@ -1,7 +1,7 @@
+ use super::{Grp, Invisible};
+ use crate::chi_type::ChiType;
+ use crate::mjai::Event;
+-use crate::state::PlayerState;
++use crate::state::{PlayerState, RawObsEvent};
+ use std::array;
+ use std::fs::File;
+ use std::io;
+@@ -56,6 +56,8 @@ pub struct Gameplay {
+     pub apply_gamma: Vec<bool>,
+     pub at_turns: Vec<u8>,
+     pub shantens: Vec<i8>,
++    /// Per-decision raw state snapshot (aligned with obs/masks/actions).
++    pub obs_raw: Vec<RawObsEvent>,
+ 
+     // per game
+     pub grp: Grp, // actually per kyoku though
+@@ -227,6 +229,10 @@ impl Gameplay {
+         mem::take(&mut self.shantens)
+     }
+ 
++    fn take_obs_raw(&mut self) -> Vec<RawObsEvent> {
++        mem::take(&mut self.obs_raw)
++    }
++
+     fn take_grp(&mut self) -> Grp {
+         mem::take(&mut self.grp)
+     }
+@@ -429,6 +435,7 @@ impl Gameplay {
+         self.apply_gamma.push(label <= 37);
+         self.at_turns.push(ctx.state.at_turn());
+         self.shantens.push(ctx.state.shanten());
++        self.obs_raw.push(ctx.state.snapshot_raw());
+ 
+         if let Some(invisibles) = ctx.invisibles {
+             let invisible_obs = invisibles[ctx.kyoku_idx].encode(
+diff --git a/libriichi/src/state/mod.rs b/libriichi/src/state/mod.rs
+index 91bfa30..494f566 100644
+--- a/libriichi/src/state/mod.rs
++++ b/libriichi/src/state/mod.rs
+@@ -4,6 +4,7 @@ mod getter;
+ mod item;
+ mod obs_repr;
+ mod player_state;
++mod raw;
+ mod sp_tables;
+ mod update;
+ 
+@@ -13,6 +14,7 @@ mod test;
+ use crate::py_helper::add_submodule;
+ pub use action::ActionCandidate;
+ pub use player_state::PlayerState;
++pub use raw::RawObsEvent;
+ pub use sp_tables::SinglePlayerTables;
+ 
+ use pyo3::prelude::*;
+@@ -25,5 +27,6 @@ pub(crate) fn register_module(
+     let m = PyModule::new(py, "state")?;
+     m.add_class::<ActionCandidate>()?;
+     m.add_class::<PlayerState>()?;
++    m.add_class::<RawObsEvent>()?;
+     add_submodule(py, prefix, super_mod, &m)
+ }
+diff --git a/libriichi/src/state/raw.rs b/libriichi/src/state/raw.rs
+new file mode 100755
+index 0000000..643ea80
+--- /dev/null
++++ b/libriichi/src/state/raw.rs
+@@ -0,0 +1,268 @@
++use super::item::{KawaItem, Sutehai};
++use super::PlayerState;
++use crate::must_tile;
++use crate::tile::Tile;
++
++use pyo3::prelude::*;
++use tinyvec::{ArrayVec, TinyVec};
++
++/// A per-decision-point snapshot of the observable game state, mirroring the
++/// raw fields consumed by the LLM4CardGame riichi data pipeline
++/// (`util/mahjong_util/gen_action_data.py` and `util/mortal_util/llm_engine.py`).
++///
++/// Fields accessed without parentheses from Python are plain attributes (raw
++/// values copied from `PlayerState`); fields accessed with parentheses are
++/// methods that convert internal values such as `Tile` into mjai tile strings
++/// (e.g. `"1m"`, `"5mr"`, `"E"`).
++#[pyclass]
++#[derive(Clone)]
++pub struct RawObsEvent {
++    #[pyo3(get)]
++    player_id: u8,
++    #[pyo3(get)]
++    kyoku: u8,
++    #[pyo3(get)]
++    honba: u8,
++    #[pyo3(get)]
++    kyotaku: u8,
++    #[pyo3(get)]
++    is_oya: bool,
++    #[pyo3(get)]
++    scores: [i32; 4],
++    #[pyo3(get)]
++    rank: u8,
++    #[pyo3(get)]
++    at_turn: u8,
++    #[pyo3(get)]
++    tiles_left: u8,
++    #[pyo3(get)]
++    shanten: i8,
++    tehai: [u8; 34],
++    #[pyo3(get)]
++    akas_in_hand: [bool; 3],
++    doras_owned: [u8; 4],
++    #[pyo3(get)]
++    doras_seen: u8,
++    #[pyo3(get)]
++    akas_seen: [bool; 3],
++    #[pyo3(get)]
++    riichi_declared: [bool; 4],
++    #[pyo3(get)]
++    riichi_accepted: [bool; 4],
++    #[pyo3(get)]
++    can_w_riichi: bool,
++    #[pyo3(get)]
++    is_w_riichi: bool,
++    #[pyo3(get)]
++    at_furiten: bool,
++    #[pyo3(get)]
++    is_menzen: bool,
++
++    bakaze: Tile,
++    jikaze: Tile,
++    waits: [bool; 34],
++    dora_indicators: ArrayVec<[Tile; 5]>,
++    tiles_seen: [u8; 34],
++    keep_shanten_discards: [bool; 34],
++    next_shanten_discards: [bool; 34],
++    ankan_candidates: ArrayVec<[Tile; 3]>,
++    kakan_candidates: ArrayVec<[Tile; 3]>,
++    kawa: [TinyVec<[Option<KawaItem>; 24]>; 4],
++    kawa_overview: [ArrayVec<[Tile; 24]>; 4],
++    fuuro_overview: [ArrayVec<[ArrayVec<[Tile; 4]>; 4]>; 4],
++    ankan_overview: [ArrayVec<[Tile; 4]>; 4],
++    last_tedashis: [Option<Sutehai>; 4],
++    riichi_sutehais: [Option<Sutehai>; 4],
++    last_self_tsumo: Option<Tile>,
++    last_kawa_tile: Option<Tile>,
++}
++
++#[pymethods]
++impl RawObsEvent {
++    // `[u8; N]` would be converted to Python `bytes` by pyo3, which is not
++    // JSON serializable and thus breaks the paper's `json.dumps` in
++    // `gen_action_data.py`; expose them as lists of ints instead.
++    #[getter]
++    fn tehai(&self) -> Vec<i32> {
++        self.tehai.iter().map(|&x| i32::from(x)).collect()
++    }
++
++    #[getter]
++    fn doras_owned(&self) -> Vec<i32> {
++        self.doras_owned.iter().map(|&x| i32::from(x)).collect()
++    }
++
++    fn bakaze(&self) -> String {
++        self.bakaze.to_string()
++    }
++
++    fn jikaze(&self) -> String {
++        self.jikaze.to_string()
++    }
++
++    fn waits(&self) -> Vec<String> {
++        self.waits
++            .iter()
++            .enumerate()
++            .filter(|&(_, &b)| b)
++            .map(|(i, _)| must_tile!(i).to_string())
++            .collect()
++    }
++
++    fn dora_indicators(&self) -> Vec<String> {
++        self.dora_indicators
++            .iter()
++            .map(|t| t.to_string())
++            .collect()
++    }
++
++    fn tiles_seen(&self) -> Vec<String> {
++        let mut ret = Vec::new();
++        for (i, &cnt) in self.tiles_seen.iter().enumerate() {
++            for _ in 0..cnt {
++                ret.push(must_tile!(i).to_string());
++            }
++        }
++        ret
++    }
++
++    fn keep_shanten_discards(&self) -> Vec<String> {
++        self.keep_shanten_discards
++            .iter()
++            .enumerate()
++            .filter(|&(_, &b)| b)
++            .map(|(i, _)| must_tile!(i).to_string())
++            .collect()
++    }
++
++    fn next_shanten_discards(&self) -> Vec<String> {
++        self.next_shanten_discards
++            .iter()
++            .enumerate()
++            .filter(|&(_, &b)| b)
++            .map(|(i, _)| must_tile!(i).to_string())
++            .collect()
++    }
++
++    fn ankan_candidates(&self) -> Vec<String> {
++        self.ankan_candidates
++            .iter()
++            .map(|t| t.to_string())
++            .collect()
++    }
++
++    fn kakan_candidates(&self) -> Vec<String> {
++        self.kakan_candidates
++            .iter()
++            .map(|t| t.to_string())
++            .collect()
++    }
++
++    fn kawa(&self) -> Vec<Vec<Option<String>>> {
++        self.kawa
++            .iter()
++            .map(|p| {
++                p.iter()
++                    .map(|item| item.as_ref().map(|i| i.to_string()))
++                    .collect()
++            })
++            .collect()
++    }
++
++    fn kawa_overview(&self) -> Vec<Vec<String>> {
++        self.kawa_overview
++            .iter()
++            .map(|p| p.iter().map(|t| t.to_string()).collect())
++            .collect()
++    }
++
++    fn fuuro_overview(&self) -> Vec<Vec<Vec<String>>> {
++        self.fuuro_overview
++            .iter()
++            .map(|p| {
++                p.iter()
++                    .map(|m| m.iter().map(|t| t.to_string()).collect())
++                    .collect()
++            })
++            .collect()
++    }
++
++    fn ankan_overview(&self) -> Vec<Vec<String>> {
++        self.ankan_overview
++            .iter()
++            .map(|p| p.iter().map(|t| t.to_string()).collect())
++            .collect()
++    }
++
++    fn last_tedashis(&self) -> Vec<Option<String>> {
++        self.last_tedashis
++            .iter()
++            .map(|o| o.as_ref().map(|s| s.to_string()))
++            .collect()
++    }
++
++    fn riichi_sutehais(&self) -> Vec<Option<String>> {
++        self.riichi_sutehais
++            .iter()
++            .map(|o| o.as_ref().map(|s| s.to_string()))
++            .collect()
++    }
++
++    fn last_self_tsumo(&self) -> Option<String> {
++        self.last_self_tsumo.map(|t| t.to_string())
++    }
++
++    fn last_kawa_tile(&self) -> Option<String> {
++        self.last_kawa_tile.map(|t| t.to_string())
++    }
++}
++
++impl PlayerState {
++    /// Snapshot the fields consumed by the LLM4CardGame riichi pipeline.
++    ///
++    /// Called from `dataset::Gameplay::add_entry` so that the snapshot index
++    /// (`Gameplay::take_obs_raw`) stays aligned with `take_obs` / `take_masks`
++    /// / `take_actions`, including the extra kan-select entries.
++    pub(crate) fn snapshot_raw(&self) -> RawObsEvent {
++        RawObsEvent {
++            player_id: self.player_id,
++            kyoku: self.kyoku,
++            honba: self.honba,
++            kyotaku: self.kyotaku,
++            is_oya: self.oya == 0,
++            scores: self.scores,
++            rank: self.rank,
++            at_turn: self.at_turn,
++            tiles_left: self.tiles_left,
++            shanten: self.shanten,
++            tehai: self.tehai,
++            akas_in_hand: self.akas_in_hand,
++            doras_owned: self.doras_owned,
++            doras_seen: self.doras_seen,
++            akas_seen: self.akas_seen,
++            riichi_declared: self.riichi_declared,
++            riichi_accepted: self.riichi_accepted,
++            can_w_riichi: self.can_w_riichi,
++            is_w_riichi: self.is_w_riichi,
++            at_furiten: self.at_furiten,
++            is_menzen: self.is_menzen,
++            bakaze: self.bakaze,
++            jikaze: self.jikaze,
++            waits: self.waits,
++            dora_indicators: self.dora_indicators.clone(),
++            tiles_seen: self.tiles_seen,
++            keep_shanten_discards: self.keep_shanten_discards,
++            next_shanten_discards: self.next_shanten_discards,
++            ankan_candidates: self.ankan_candidates.clone(),
++            kakan_candidates: self.kakan_candidates.clone(),
++            kawa: self.kawa.clone(),
++            kawa_overview: self.kawa_overview.clone(),
++            fuuro_overview: self.fuuro_overview.clone(),
++            ankan_overview: self.ankan_overview.clone(),
++            last_tedashis: self.last_tedashis,
++            riichi_sutehais: self.riichi_sutehais,
++            last_self_tsumo: self.last_self_tsumo,
++            last_kawa_tile: self.last_kawa_tile,
++        }
++    }
++}

@@ -1,0 +1,19 @@
+### 基座零样本对照：与 qwen35_0_8b_predict.yaml 相同的 5000 条、相同模板、贪心解码，只是不挂 LoRA（未经后训练）
+### 生成长度放宽到 128：后训练模型只输出一句 JSON，基座模型可能先说几句再给 JSON（解析取第一个 {...}）
+### 评测：train_small/zero_shot_report.py（另报格式正确率、合法率和规则基线）
+model_name_or_path: Qwen/Qwen3.5-0.8B
+trust_remote_code: true
+stage: sft
+do_predict: true
+finetuning_type: lora
+dataset_dir: /home/user/mahjong-llm/work/sft
+eval_dataset: riichi_test5k
+template: qwen3_5_nothink
+cutoff_len: 4096
+output_dir: /home/user/mahjong-llm/work/pred/qwen35-0.8b-base
+overwrite_output_dir: true
+per_device_eval_batch_size: 8
+predict_with_generate: true
+max_new_tokens: 128
+do_sample: false
+report_to: none

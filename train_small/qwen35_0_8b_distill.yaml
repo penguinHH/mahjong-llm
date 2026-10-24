@@ -1,0 +1,48 @@
+### Mortal 蒸馏（硬标签）：prompt 与 qwen35_0_8b_lora.yaml 完全相同（riichi_100k 的 10 万条），
+### 只把答案从"牌谱里玩家的动作"换成"Mortal 的首选动作"（tools/build_mortal_labels.py + make_distill_sets.py）。
+### 其余超参不变，便于和人类标签的 0.8B 直接对比；另加 2B 那次验证过的可续训 / 显存设置（不影响训练结果）。
+### 注意：验证集也是 Mortal 标签，eval_loss 不能和人类标签那次直接比；对比看 eval_vs_mortal.py。
+### model
+model_name_or_path: Qwen/Qwen3.5-0.8B
+trust_remote_code: true
+
+### method
+stage: sft
+do_train: true
+finetuning_type: lora
+lora_target: all
+
+### dataset
+dataset_dir: /home/user/mahjong-llm/work/sft
+dataset: riichi_100k_mortal
+template: qwen3_5_nothink
+cutoff_len: 4096
+overwrite_cache: true
+preprocessing_num_workers: 8
+
+### output
+output_dir: /home/user/mahjong-llm/work/ckpt/qwen35-0.8b-riichi_100k-mortal
+logging_steps: 10
+save_strategy: steps
+save_steps: 200                 # 完整 checkpoint，可随时停、同一条命令续训
+save_only_model: false
+plot_loss: true
+overwrite_output_dir: false
+report_to: none
+
+### train
+per_device_train_batch_size: 2
+gradient_accumulation_steps: 8
+learning_rate: 1.0e-4
+num_train_epochs: 1
+lr_scheduler_type: cosine
+warmup_ratio: 0.1
+bf16: true
+enable_liger_kernel: true
+torch_empty_cache_steps: 50
+
+### eval
+val_size: 1000
+per_device_eval_batch_size: 2
+eval_strategy: steps
+eval_steps: 400

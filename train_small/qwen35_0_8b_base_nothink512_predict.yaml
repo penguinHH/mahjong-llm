@@ -1,0 +1,20 @@
+### 基座零样本对照（关闭思考）：qwen3_5_nothink 模板并不会关掉 Qwen3.5 的思考——第一次跑基座全部以 <think> 开头、128 token 内被截断，格式正确 0%。
+### 生成长度 512：48 号（64）里 0.8B 基座不写 JSON、先写英文分析（"Based on the provided game information…"）被截断；放宽到 512 看它写完分析后能不能给出动作
+### 评测：train_small/zero_shot_report.py（另报格式正确率、合法率和规则基线）
+model_name_or_path: Qwen/Qwen3.5-0.8B
+trust_remote_code: true
+stage: sft
+do_predict: true
+finetuning_type: lora
+dataset_dir: /home/user/mahjong-llm/work/sft
+eval_dataset: riichi_test5k
+template: qwen3_5
+enable_thinking: false   # ReasoningTemplate 在提示末尾预填空的 <think></think>，模型直接作答
+cutoff_len: 4096
+output_dir: /home/user/mahjong-llm/work/pred/qwen35-0.8b-base-nothink-512
+overwrite_output_dir: true
+per_device_eval_batch_size: 8
+predict_with_generate: true
+max_new_tokens: 512
+do_sample: false
+report_to: none

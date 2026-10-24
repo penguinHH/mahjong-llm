@@ -1,0 +1,19 @@
+### 0.8B（人类标签，10 万条那次）第 1200 步的检查点在留出集上生成动作：看过约 1.9 万条样本，
+### 和 TinySwallow-1.5B（2 万条，1219 步）的数据量相当，作为同等数据量的对照（注意学习率还没退火到 0）
+model_name_or_path: Qwen/Qwen3.5-0.8B
+adapter_name_or_path: /home/user/mahjong-llm/work/ckpt/qwen35-0.8b-riichi_100k/checkpoint-1200
+trust_remote_code: true
+stage: sft
+do_predict: true
+finetuning_type: lora
+dataset_dir: /home/user/mahjong-llm/work/sft
+eval_dataset: riichi_test5k
+template: qwen3_5_nothink
+cutoff_len: 4096
+output_dir: /home/user/mahjong-llm/work/pred/qwen35-0.8b-ckpt1200
+overwrite_output_dir: true
+per_device_eval_batch_size: 8
+predict_with_generate: true
+max_new_tokens: 32
+do_sample: false
+report_to: none

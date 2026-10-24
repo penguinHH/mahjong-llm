@@ -1,0 +1,48 @@
+### Qwen3.5：原生多模态 + 混合注意力（3 层线性注意力 : 1 层全注意力）；只训文本，视觉塔默认冻结
+### 基于论文 train_config/card_lora_sft.yaml，只改了：模型（Qwen3.5-2B）、单卡、路径、关掉 wandb
+### model
+model_name_or_path: Qwen/Qwen3.5-2B
+trust_remote_code: true
+
+### method
+stage: sft
+do_train: true
+finetuning_type: lora
+lora_target: all                 # 论文：所有线性层；rank 用 LLaMA-Factory 默认 8（论文未改）
+
+### dataset
+dataset_dir: /home/user/mahjong-llm/work/sft
+dataset: riichi_100k
+template: qwen3_5_nothink        # 输出只是一句 JSON 动作，不需要思考过程
+cutoff_len: 4096                 # 论文值；样本最长 4,323 字符，不会截断
+overwrite_cache: true
+preprocessing_num_workers: 8
+
+### output
+output_dir: /home/user/mahjong-llm/work/ckpt/qwen35-2b-riichi_100k
+logging_steps: 10
+save_strategy: steps
+save_steps: 200                 # 每个完整 checkpoint 约 116MB；中途停止最多损失 200 步（约 25 分钟）
+save_only_model: false          # 存优化器/调度器/RNG（LoRA 只有 840 万参数，多几十 MB），才能真正断点续训
+plot_loss: true
+overwrite_output_dir: false     # 输出目录里有 checkpoint 时同一条命令自动续训；重新从头训要先挪走旧目录
+report_to: none
+
+### train
+per_device_train_batch_size: 2
+gradient_accumulation_steps: 8      # 论文 2×8（每卡）；单卡保持每步 16 条
+learning_rate: 1.0e-4
+num_train_epochs: 1
+lr_scheduler_type: cosine
+warmup_ratio: 0.1
+bf16: true
+enable_liger_kernel: true      # 融合输出层 + loss，不生成 24.8 万词表的完整 logits，省显存
+torch_empty_cache_steps: 50    # 验证（liger 不生效，要算完整 logits）后把缓存显存还给驱动；
+                               # 2026-10-17 首跑：第 400 步验证后显存 7.4→15.6GB，每步 6.8s→9.3s
+                               # 启动时另设 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+
+### eval
+val_size: 1000
+per_device_eval_batch_size: 1  # 2B 验证时完整 logits 很大，bs 1 峰值显存减半（只影响验证，不影响训练）
+eval_strategy: steps
+eval_steps: 400

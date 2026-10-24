@@ -1,0 +1,51 @@
+{
+  "riichi_100k": {
+    "file_name": "riichi_100k.jsonl",
+    "columns": {
+      "prompt": "instruction",
+      "response": "output"
+    }
+  },
+  "riichi_full": {
+    "file_name": "/home/user/mahjong-llm/work/full7000/sft_riichi.jsonl",
+    "columns": {
+      "prompt": "instruction",
+      "response": "output"
+    }
+  },
+  "riichi_test5k": {
+    "file_name": "riichi_test5k.jsonl",
+    "columns": {
+      "prompt": "instruction",
+      "response": "output"
+    }
+  },
+  "riichi_100k_mortal": {
+    "file_name": "riichi_100k_mortal.jsonl",
+    "columns": {
+      "prompt": "instruction",
+      "response": "output"
+    }
+  },
+  "riichi_test5k_mortal": {
+    "file_name": "riichi_test5k_mortal.jsonl",
+    "columns": {
+      "prompt": "instruction",
+      "response": "output"
+    }
+  },
+  "riichi_100k_mortal_reason": {
+    "file_name": "riichi_100k_mortal_reason.jsonl",
+    "columns": {
+      "prompt": "instruction",
+      "response": "output"
+    }
+  },
+  "riichi_test5k_mortal_reason": {
+    "file_name": "riichi_test5k_mortal_reason.jsonl",
+    "columns": {
+      "prompt": "instruction",
+      "response": "output"
+    }
+  }
+}

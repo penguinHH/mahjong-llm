@@ -1,0 +1,21 @@
+### VLM 基座零样本对照（关闭思考）：R83 用 qwen3_5_nothink 模板，基座全部先写 <think>（还把局面当成围棋/将棋），128 token 截断，格式 0%
+### 与 qwen35_0_8b_base_nothink_predict.yaml 同样的改法：template qwen3_5 + enable_thinking false（ReasoningTemplate 预填空的 <think></think>）
+### 其余与 qwen35_0_8b_vlm_base_predict.yaml 相同：同一批 5000 张测试图、贪心、不挂 LoRA；评测 train_small/zero_shot_report.py
+model_name_or_path: Qwen/Qwen3.5-0.8B
+trust_remote_code: true
+image_max_pixels: 786432
+stage: sft
+do_predict: true
+finetuning_type: lora
+dataset_dir: /home/user/mahjong-llm/work/vlm
+eval_dataset: vlm_test_action
+template: qwen3_5
+enable_thinking: false
+cutoff_len: 2048
+output_dir: /home/user/mahjong-llm/work/pred/qwen35-0.8b-vlm-base-nothink
+overwrite_output_dir: true
+per_device_eval_batch_size: 8
+predict_with_generate: true
+max_new_tokens: 64
+do_sample: false
+report_to: none

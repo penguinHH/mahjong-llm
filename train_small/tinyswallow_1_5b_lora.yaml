@@ -1,0 +1,49 @@
+### TinySwallow-1.5B（Sakana AI，Qwen2.5-1.5B 架构，日语蒸馏）：原本在 Colab 免费版跑（colab/tinyswallow_1_5b_colab.ipynb），
+### 到额度上限后搬回本地。数据和 Colab 版相同：riichi_100k 前 2 万条、val_size 500 → 每 epoch 1219 步；
+### 只把 fp16 换成 bf16（本地卡支持）。从头训练，没有接 Colab 的 checkpoint-400（精度设置不同，本地重跑 400 步也只要半小时左右）。
+### model
+model_name_or_path: SakanaAI/TinySwallow-1.5B-Instruct
+trust_remote_code: true
+
+### method
+stage: sft
+do_train: true
+finetuning_type: lora
+lora_target: all
+
+### dataset
+dataset_dir: /home/user/mahjong-llm/work/sft
+dataset: riichi_100k
+max_samples: 20000
+template: qwen
+default_system: あなたは、Sakana AI株式会社が開発したTinySwallowです。小型ながら、誠実で優秀なアシスタントです。
+cutoff_len: 4096
+overwrite_cache: true
+preprocessing_num_workers: 8
+
+### output
+output_dir: /home/user/mahjong-llm/work/ckpt/tinyswallow-1.5b-riichi_20k
+logging_steps: 10
+save_strategy: steps
+save_steps: 200                 # 完整 checkpoint，可随时停、同一条命令续训
+save_only_model: false
+plot_loss: true
+overwrite_output_dir: false
+report_to: none
+
+### train
+per_device_train_batch_size: 2
+gradient_accumulation_steps: 8
+learning_rate: 1.0e-4
+num_train_epochs: 1
+lr_scheduler_type: cosine
+warmup_ratio: 0.1
+bf16: true
+enable_liger_kernel: true
+torch_empty_cache_steps: 50
+
+### eval
+val_size: 500
+per_device_eval_batch_size: 1
+eval_strategy: steps
+eval_steps: 400

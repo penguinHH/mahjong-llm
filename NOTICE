@@ -1,0 +1,14 @@
+This repository contains original code licensed under the Apache License 2.0,
+except third_party/libriichi_patch/, which modifies Mortal (libriichi) and is
+licensed under the GNU Affero General Public License v3.0.
+
+Third-party projects used (not redistributed here):
+- Mortal / libriichi (https://github.com/Equim-chan/Mortal) - AGPL-3.0
+- LLM4CardGame (https://github.com/THUDM/LLM4CardGame) - no license file;
+  fetch it from upstream. Prompts and data conversion come from this project.
+- LLaMA-Factory (https://github.com/hiyouga/LLaMA-Factory) - Apache-2.0
+- Qwen3.5 / Qwen2.5 models (Alibaba Qwen) - Apache-2.0
+
+Data: Tenhou (tenhou.net) Houou-table game logs, converted to mjai format.
+The logs, data derived from them and models trained on them are not
+included and are not distributed.

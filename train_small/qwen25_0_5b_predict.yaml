@@ -1,0 +1,18 @@
+### 离线评测：在留出的第 7001-8000 局上生成动作，再用 eval_acc.py 算一致率
+model_name_or_path: Qwen/Qwen2.5-0.5B-Instruct
+adapter_name_or_path: /home/user/mahjong-llm/work/ckpt/qwen25-0.5b-riichi_100k
+trust_remote_code: true
+stage: sft
+do_predict: true
+finetuning_type: lora
+dataset_dir: /home/user/mahjong-llm/work/sft
+eval_dataset: riichi_test5k
+template: qwen
+cutoff_len: 4096
+output_dir: /home/user/mahjong-llm/work/pred/qwen25-0.5b
+overwrite_output_dir: true
+per_device_eval_batch_size: 8
+predict_with_generate: true
+max_new_tokens: 32
+do_sample: false
+report_to: none

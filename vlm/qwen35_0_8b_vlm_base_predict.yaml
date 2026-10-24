@@ -1,0 +1,20 @@
+### VLM 基座零样本对照（R83）：与 qwen35_0_8b_vlm_human_predict.yaml 相同的 5000 张测试图、相同模板、贪心解码，只是不挂 LoRA
+### 与文字基座零样本（qwen35_0_8b_base_predict.yaml）同思路：max_new_tokens 放宽到 128，解析取第一个 {...}
+### 评测：train_small/zero_shot_report.py（报格式正确率、合法率、动作分布、规则基线）+ eval_vs_mortal.py
+model_name_or_path: Qwen/Qwen3.5-0.8B
+trust_remote_code: true
+image_max_pixels: 786432
+stage: sft
+do_predict: true
+finetuning_type: lora
+dataset_dir: /home/user/mahjong-llm/work/vlm
+eval_dataset: vlm_test_action
+template: qwen3_5_nothink
+cutoff_len: 2048
+output_dir: /home/user/mahjong-llm/work/pred/qwen35-0.8b-vlm-base
+overwrite_output_dir: true
+per_device_eval_batch_size: 8
+predict_with_generate: true
+max_new_tokens: 128
+do_sample: false
+report_to: none

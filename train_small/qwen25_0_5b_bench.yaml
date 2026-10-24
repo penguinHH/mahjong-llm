@@ -1,0 +1,46 @@
+### 基于论文 train_config/card_lora_sft.yaml，只改了：模型（Qwen2.5-0.5B）、单卡、路径、关掉 wandb
+### model
+model_name_or_path: Qwen/Qwen2.5-0.5B-Instruct
+trust_remote_code: true
+
+### method
+stage: sft
+do_train: true
+finetuning_type: lora
+lora_target: all                 # 论文：所有线性层；rank 用 LLaMA-Factory 默认 8（论文未改）
+
+### dataset
+dataset_dir: /home/user/mahjong-llm/work/sft
+dataset: riichi_100k
+template: qwen
+cutoff_len: 4096                 # 论文值；样本最长 4,323 字符，不会截断
+overwrite_cache: true
+preprocessing_num_workers: 8
+max_samples: 1000
+
+### output
+output_dir: /home/user/mahjong-llm/work/ckpt/bench-qwen25-0.5b
+logging_steps: 10
+save_strategy: steps
+save_steps: 400
+save_only_model: true
+plot_loss: true
+overwrite_output_dir: true
+report_to: none
+
+### train
+per_device_train_batch_size: 4
+gradient_accumulation_steps: 4      # 论文 2×8（每卡）；单卡保持每步 16 条
+learning_rate: 1.0e-4
+num_train_epochs: 1
+lr_scheduler_type: cosine
+warmup_ratio: 0.1
+bf16: true
+max_steps: 30
+include_num_input_tokens_seen: true
+
+### eval
+val_size: 0
+per_device_eval_batch_size: 2
+eval_strategy: 'no'
+eval_steps: 400

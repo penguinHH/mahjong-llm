@@ -1,0 +1,25 @@
+# 重み・データ・実行産物は公開しない / never commit weights, data or run outputs
+*.pt
+*.pth
+*.safetensors
+*.bin
+*.ckpt
+*.onnx
+*.npy
+*.npz
+*.jsonl
+*.json.zst
+*.gz
+*.zst
+*.tar
+*.zip
+*.so
+work/
+data/
+refs/
+runs/
+samples/
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+.env

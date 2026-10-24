@@ -1,0 +1,47 @@
+### 理由付き蒸馏：prompt 与 qwen35_0_8b_distill.yaml 完全相同，答案从 {"action": ...} 换成
+### {"reason": "<程序算出的事实组成的日语理由>", "action": "<Mortal 首选>"}（tools/build_explanations.py）。
+### 其余超参不变，对比：①动作一致率有没有变化 ②模型写出的理由事实正确率（facts.jsonl 自动核对）。
+### model
+model_name_or_path: Qwen/Qwen3.5-0.8B
+trust_remote_code: true
+
+### method
+stage: sft
+do_train: true
+finetuning_type: lora
+lora_target: all
+
+### dataset
+dataset_dir: /home/user/mahjong-llm/work/sft
+dataset: riichi_100k_mortal_reason
+template: qwen3_5_nothink
+cutoff_len: 4096
+overwrite_cache: true
+preprocessing_num_workers: 8
+
+### output
+output_dir: /home/user/mahjong-llm/work/ckpt/qwen35-0.8b-riichi_100k-mortal-reason
+logging_steps: 10
+save_strategy: steps
+save_steps: 200                 # 完整 checkpoint，可随时停、同一条命令续训
+save_only_model: false
+plot_loss: true
+overwrite_output_dir: false
+report_to: none
+
+### train
+per_device_train_batch_size: 2
+gradient_accumulation_steps: 8
+learning_rate: 1.0e-4
+num_train_epochs: 1
+lr_scheduler_type: cosine
+warmup_ratio: 0.1
+bf16: true
+enable_liger_kernel: true
+torch_empty_cache_steps: 50
+
+### eval
+val_size: 1000
+per_device_eval_batch_size: 2
+eval_strategy: steps
+eval_steps: 400

@@ -1,0 +1,11 @@
+[Unit]
+Description=GPU queue runner for mahjong-llm (work/queue)
+After=network.target
+
+[Service]
+ExecStart=/usr/bin/bash /home/user/mahjong-llm/work/queue/runner.sh
+Restart=always
+RestartSec=30
+
+[Install]
+WantedBy=default.target

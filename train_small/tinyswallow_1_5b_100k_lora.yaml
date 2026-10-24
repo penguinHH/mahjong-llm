@@ -1,0 +1,47 @@
+### TinySwallow-1.5B（Sakana AI，Qwen2.5-1.5B 架构，日语蒸馏）10 万条全量：数据、超参（每步 16 条、lr 1e-4、1 epoch、
+### LoRA rank 8、val_size 1000）与 Qwen3.5-0.8B / 2B / Qwen2.5-0.5B 相同，可直接对比；2 万条那次见 tinyswallow_1_5b_lora.yaml。
+### model
+model_name_or_path: SakanaAI/TinySwallow-1.5B-Instruct
+trust_remote_code: true
+
+### method
+stage: sft
+do_train: true
+finetuning_type: lora
+lora_target: all
+
+### dataset
+dataset_dir: /home/user/mahjong-llm/work/sft
+dataset: riichi_100k
+template: qwen
+default_system: あなたは、Sakana AI株式会社が開発したTinySwallowです。小型ながら、誠実で優秀なアシスタントです。
+cutoff_len: 4096
+overwrite_cache: true
+preprocessing_num_workers: 8
+
+### output
+output_dir: /home/user/mahjong-llm/work/ckpt/tinyswallow-1.5b-riichi_100k
+logging_steps: 10
+save_strategy: steps
+save_steps: 200                 # 完整 checkpoint，可随时停、同一条命令续训
+save_only_model: false
+plot_loss: true
+overwrite_output_dir: false
+report_to: none
+
+### train
+per_device_train_batch_size: 2
+gradient_accumulation_steps: 8
+learning_rate: 1.0e-4
+num_train_epochs: 1
+lr_scheduler_type: cosine
+warmup_ratio: 0.1
+bf16: true
+enable_liger_kernel: true
+torch_empty_cache_steps: 50
+
+### eval
+val_size: 1000
+per_device_eval_batch_size: 1
+eval_strategy: steps
+eval_steps: 400

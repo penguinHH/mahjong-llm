@@ -1,0 +1,45 @@
+### Qwen3.5：原生多模态 + 混合注意力（3 层线性注意力 : 1 层全注意力）；只训文本，视觉塔默认冻结
+### 基于论文 train_config/card_lora_sft.yaml，只改了：模型（Qwen3.5-0.8B）、单卡、路径、关掉 wandb
+### model
+model_name_or_path: Qwen/Qwen3.5-0.8B
+trust_remote_code: true
+
+### method
+stage: sft
+do_train: true
+finetuning_type: lora
+lora_target: all                 # 论文：所有线性层；rank 用 LLaMA-Factory 默认 8（论文未改）
+
+### dataset
+dataset_dir: /home/user/mahjong-llm/work/sft
+dataset: riichi_100k
+template: qwen3_5_nothink        # 输出只是一句 JSON 动作，不需要思考过程
+cutoff_len: 4096                 # 论文值；样本最长 4,323 字符，不会截断
+overwrite_cache: true
+preprocessing_num_workers: 8
+
+### output
+output_dir: /home/user/mahjong-llm/work/ckpt/qwen35-0.8b-riichi_100k
+logging_steps: 10
+save_strategy: steps
+save_steps: 400
+save_only_model: true
+plot_loss: true
+overwrite_output_dir: true
+report_to: none
+
+### train
+per_device_train_batch_size: 2
+gradient_accumulation_steps: 8      # 论文 2×8（每卡）；单卡保持每步 16 条
+learning_rate: 1.0e-4
+num_train_epochs: 1
+lr_scheduler_type: cosine
+warmup_ratio: 0.1
+bf16: true
+enable_liger_kernel: true      # 融合输出层 + loss，不生成 24.8 万词表的完整 logits，省显存
+
+### eval
+val_size: 1000
+per_device_eval_batch_size: 2
+eval_strategy: steps
+eval_steps: 400
