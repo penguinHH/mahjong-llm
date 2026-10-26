@@ -20,8 +20,8 @@ but never used because llm_function never reaches the API call.
 import os
 import sys
 
-BUILD_DIR = os.path.expanduser("~/mahjong-llm/Mortal/target/release")
-PAPER_ROOT = "/mnt/d/mahjong-llm/refs/LLM4CardGame"
+BUILD_DIR = os.path.join(os.environ.get("MORTAL_DIR", os.path.expanduser("~/mahjong-llm/Mortal")), "target", "release")
+PAPER_ROOT = os.environ.get("LLM4CARDGAME_DIR", "/mnt/d/mahjong-llm/refs/LLM4CardGame")
 
 sys.path.insert(0, os.path.join(PAPER_ROOT, "util", "mahjong_util"))
 sys.path.insert(0, PAPER_ROOT)

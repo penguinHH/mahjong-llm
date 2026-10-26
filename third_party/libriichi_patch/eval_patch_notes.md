@@ -35,7 +35,7 @@
   返回值接受 `Vec<usize>`；合成 `q_values=全 0`、`masks=真实掩码`、`is_greedy=true`
   （gen_meta 仅写日志 meta，不参与决策；`enable_rule_based_agari_guard=false` 不读 q）。
 - 属性容错：上述三属性缺失时默认 false（`optional_attr`）；`name / version` 仍必需。
-- 编译坑（已修入 apply_eval_patch.py）：`PyList` 需 `use pyo3::types::PyList;`；
+- 编译坑（已修入 0002-mortal2-engine.diff）：`PyList` 需 `use pyo3::types::PyList;`；
   raw 分支返回值需包 `Ok(...)`（闭包整体返回 `Result<tuple, anyhow::Error>`）。
 
 ## 验证（无 LLM 桩引擎冒烟）
@@ -43,7 +43,7 @@
 `work/patch/arena_stub_smoke.py`：challenger=mortal2（无三个可选属性、返回扁平 id）；
 champion=mortal（标准四元组）；策略：合法动作优先 43[hora] > 42[kan] > 37[reach] > 最低 id。
 
-- 构建 `build_eval.sh`：2m39s → `target/release/libriichi.so`。
+- 构建（当时用的 `build_eval.sh`，现为 `build.sh all --no-deploy`）：2m39s → `target/release/libriichi.so`。
 - 冒烟①（seed_count=2, seed=10000）：8 局，rankings [2,2,2,2]；llm 1050 批 / 1798 决策。
 - 冒烟②（seed_count=4, seed=20000）：16 局，rankings [4,4,4,4]；决策 3354。
   事件普查：**ankan 16 / daiminkan 44 / kakan 28 / hora 20 / reach 4 / dora 88 /
@@ -81,10 +81,14 @@ LLMEngine 自动回退 `random.choice(legal_actions)`），**全程零 HTTP / �
    engine_cham），默认 `--models llm mortal` 不受影响，暂不改动。
 6. ~~prompt 兼容性干跑~~ ✅ 已完成（见上节「端到端干跑」）。
 
-## 文件清单（work/patch/）
+## 文件清单
 
-- `apply_eval_patch.py`：补丁源（每处替换带出现次数断言；含 PyList/Ok 修正）
-- `fix_eval_build.py` / `fix_then_build.sh`：对已打补丁树的一次性修正（本次用）
-- `build_eval.sh`：幂等 补丁+编译（产出 target/release/libriichi.so；不部署）
+补丁原先由 Python 脚本按原文查找替换生成（`apply_patch.py`、`apply_eval_patch.py`，以及对已打补丁树的一次性修正 `fix_eval_build.py`）。现已改为 `git apply` 用的统一 diff，内容与当时编译通过的源码树逐字相同：
+
+- `0001-take-obs-raw.diff`：数据侧（`state/raw.rs` 新增、`state/mod.rs`、`dataset/gameplay.rs`）
+- `0002-mortal2-engine.diff`：评测侧（`agent/py_agent.rs`、`agent/mortal.rs`，含 PyList/Ok 修正；依赖 0001）
+- `apply.sh`：按顺序 `git apply`，先检查再打，已打过的跳过
+- `build.sh`：补丁 + 编译 + 部署 + 自检（`--no-deploy` 只编译）
+- `deploy_eval.sh`：只部署并自检
 - `arena_stub_smoke.py` / `run_arena_smoke.sh`：桩引擎冒烟（参数：seed_count / seed / log_dir）
 - `inspect_arena_logs.sh`：日志普查（文件数 + 事件计数）

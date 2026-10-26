@@ -3,7 +3,7 @@ import json
 import os
 import sys
 
-PAPER = "/mnt/d/mahjong-llm/refs/LLM4CardGame"
+PAPER = os.environ.get("LLM4CARDGAME_DIR", "/mnt/d/mahjong-llm/refs/LLM4CardGame")
 MJ_DIR = os.path.join(PAPER, "util", "mahjong_util")
 sys.path.insert(0, MJ_DIR)
 sys.path.insert(0, PAPER)

@@ -1,21 +1,19 @@
 #!/usr/bin/env bash
-# Deploy the combined libriichi.so (take_obs_raw + mortal2 patches) into the
-# paper tree, then re-run the raw selftest against the deployed copy.
-#
-# Run this ONLY after the full data-generation task has finished.
+# Deploy an already-built libriichi.so (0001 + 0002) into the paper tree, then run the raw selftest
+# against the deployed copy. Use this after `build.sh all --no-deploy`, once nothing is using the old .so
+# (e.g. after a data-generation run has finished).
 set -euo pipefail
-SRC="$HOME/mahjong-llm/Mortal/target/release/libriichi.so"
-DST_DIR="/mnt/d/mahjong-llm/refs/LLM4CardGame/util/mahjong_util"
-DST="$DST_DIR/libriichi.so"
-V="$HOME/mahjong-llm/venv/bin/python"
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+MORTAL_DIR="${MORTAL_DIR:-$HOME/mahjong-llm/Mortal}"
+LLM4CARDGAME_DIR="${LLM4CARDGAME_DIR:-/mnt/d/mahjong-llm/refs/LLM4CardGame}"
+VENV_PY="${VENV_PY:-$HOME/mahjong-llm/venv/bin/python}"
+export MORTAL_DIR LLM4CARDGAME_DIR
+SRC="$MORTAL_DIR/target/release/libriichi.so"
+DST="$LLM4CARDGAME_DIR/util/mahjong_util/libriichi.so"
 
-if [ -f "$DST" ]; then
-    cp -f "$DST" "$DST.bak_prev2"
-    echo "backup: $DST.bak_prev2"
-fi
-cp -f "$SRC" "$DST"
+[ -f "$DST" ] && cp -f "$DST" "$DST.bak_prev" && echo "backup: $DST.bak_prev"
+cp -f "$SRC" "$DST.tmp" && mv -f "$DST.tmp" "$DST"
 echo "deployed:"; ls -la "$DST"*
-
 echo "== raw selftest against deployed .so =="
-"$V" /mnt/d/mahjong-llm/work/patch/selftest_raw.py
+"$VENV_PY" "$HERE/selftest_raw.py"
 echo "== deploy done =="

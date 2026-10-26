@@ -60,7 +60,7 @@ In ④ the move follows the encoder's ranking; retrained without it, the LLM alo
 
 前提：WSL2（Ubuntu）、Python 3.12、Rust、CUDA GPU（16 GB）、[LLaMA-Factory](https://github.com/hiyouga/LLaMA-Factory)。スクリプトは元の配置（リポジトリ = `/mnt/d/mahjong-llm`、作業ディレクトリ = `~/mahjong-llm/work`）を前提にしたパスを含むので、環境に合わせて書き換えてください。
 
-1. 論文コード [THUDM/LLM4CardGame](https://github.com/THUDM/LLM4CardGame) と [Mortal](https://github.com/Equim-chan/Mortal) を取得し、`third_party/libriichi_patch/` の差分を当てて libriichi をビルド。
+1. 論文コード [THUDM/LLM4CardGame](https://github.com/THUDM/LLM4CardGame) と [Mortal](https://github.com/Equim-chan/Mortal) を取得し、`third_party/libriichi_patch/` の差分（`git apply` 形式）を当てて libriichi をビルド（`bash third_party/libriichi_patch/build.sh`、詳細は同ディレクトリの README）。
 2. 天鳳 鳳凰卓の mjai 形式の牌譜を各自で入手し、`tools/run_pipeline_fast.py` で判断局面と SFT データを作る。
 3. `tools/build_mortal_labels.py` で Mortal の Q 値ラベルを付与（Mortal の重みが別途必要）。`tools/build_explanations.py` で理由の教師を生成。
 4. テキスト LLM：`train_small/*.yaml` を LLaMA-Factory で学習・推論。
